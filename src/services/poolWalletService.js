@@ -6,7 +6,7 @@ const {
   Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction,
 } = require('@solana/web3.js')
 const {
-  getAssociatedTokenAddress, getOrCreateAssociatedTokenAccount, createTransferInstruction,
+  getAssociatedTokenAddress, getOrCreateAssociatedTokenAccount, createTransferInstruction, TOKEN_PROGRAM_ID,
 } = require('@solana/spl-token')
 const bs58 = require('bs58')
 
@@ -27,6 +27,16 @@ function getPoolKeypair() {
   return Keypair.fromSecretKey(decode(need('POOL_WALLET_PRIVATE_KEY')))
 }
 
+// pump.fun tokens use Token-2022; legacy tokens use the classic SPL program.
+// Detect from the mint's owner program so either kind works automatically.
+let _prog = null
+async function tokenProgram() {
+  if (_prog) return _prog
+  const info = await connection.getAccountInfo(harvestMint())
+  _prog = info ? info.owner : TOKEN_PROGRAM_ID
+  return _prog
+}
+
 let _decimals = null
 async function decimals() {
   if (_decimals != null) return _decimals
@@ -35,7 +45,7 @@ async function decimals() {
   return _decimals
 }
 
-const poolAta = () => getAssociatedTokenAddress(harvestMint(), poolWallet())
+const poolAta = async () => getAssociatedTokenAddress(harvestMint(), poolWallet(), false, await tokenProgram())
 
 async function getPoolBalance() {
   try {
@@ -45,7 +55,7 @@ async function getPoolBalance() {
 
 async function getUserTokenBalance(walletAddress) {
   try {
-    const ata = await getAssociatedTokenAddress(harvestMint(), new PublicKey(walletAddress))
+    const ata = await getAssociatedTokenAddress(harvestMint(), new PublicKey(walletAddress), false, await tokenProgram())
     return (await connection.getTokenAccountBalance(ata)).value.uiAmount || 0
   } catch { return 0 }
 }
@@ -53,11 +63,12 @@ async function getUserTokenBalance(walletAddress) {
 // Send $HARVEST from the pool to a user (withdrawals). amount = UI tokens.
 async function sendTokensToUser(userWalletAddress, amount) {
   const pool = getPoolKeypair()
+  const prog = await tokenProgram()
   const userPubkey = new PublicKey(userWalletAddress)
-  const fromAta = await getAssociatedTokenAddress(harvestMint(), poolWallet())
-  const toAta = await getOrCreateAssociatedTokenAccount(connection, pool, harvestMint(), userPubkey)
+  const fromAta = await getAssociatedTokenAddress(harvestMint(), poolWallet(), false, prog)
+  const toAta = await getOrCreateAssociatedTokenAccount(connection, pool, harvestMint(), userPubkey, false, undefined, undefined, prog)
   const raw = BigInt(Math.round(amount * 10 ** (await decimals())))
-  const ix = createTransferInstruction(fromAta, toAta.address, poolWallet(), raw)
+  const ix = createTransferInstruction(fromAta, toAta.address, poolWallet(), raw, [], prog)
   return sendAndConfirmTransaction(connection, new Transaction().add(ix), [pool])
 }
 
