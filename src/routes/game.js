@@ -11,9 +11,23 @@ const handle = (fn) => async (req, res, next) => {
   }
 }
 
-// Public landing stats (no auth) — total registered players
+// Cached on-chain vault balance (total $HARVEST pooled). Cached so the public
+// landing page doesn't hit the RPC on every visit. null until the vault exists.
+let poolCache = { value: null, at: 0 }
+async function getPool() {
+  if (Date.now() - poolCache.at < 30000) return poolCache.value
+  try {
+    const solana = require('../utils/solana-contract')
+    poolCache = { value: await solana.getVaultBalance(), at: Date.now() }
+  } catch {
+    poolCache = { value: poolCache.value, at: Date.now() } // keep last good value
+  }
+  return poolCache.value
+}
+
+// Public landing stats (no auth) — total players + on-chain pool size
 router.get('/stats', handle(async (req, res) => {
-  res.json({ players: await q.playerCount() })
+  res.json({ players: await q.playerCount(), pool: await getPool() })
 }))
 
 router.get('/state', verifyToken, handle(async (req, res) => {
