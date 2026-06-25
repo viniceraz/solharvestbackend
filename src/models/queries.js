@@ -389,7 +389,8 @@ const q = {
        FROM users WHERE id = $1`,
       [userId]
     )
-    return rows[0] || { earnings: 0, referrals: 0, rewarded: 0 }
+    const r = rows[0] || {}
+    return { earnings: Number(r.earnings) || 0, referrals: r.referrals || 0, rewarded: r.rewarded || 0 }
   },
 
   // ---- On-chain deposits (idempotency) ------------------------------------
