@@ -47,6 +47,13 @@ router.post('/connect', async (req, res, next) => {
       await q.ensureInventory(user.id, STARTER.inventory)
       await q.ensureScarecrow(user.id)
       await q.addNotification(user.id, 'Welcome to SolHarvest! Your farm is ready.', 'success')
+
+      // Referral binding — ONLY for brand-new accounts, set once, never self.
+      const refWallet = req.body && req.body.referrer
+      if (refWallet && isValidWallet(refWallet) && refWallet !== wallet) {
+        const refUser = await q.findUserByWallet(refWallet)
+        if (refUser && refUser.id !== user.id) await q.setReferrerOnce(user.id, refUser.id)
+      }
     } else if (isAdminWallet && !user.is_admin) {
       await q.setAdmin(user.id, true)
       user.is_admin = true

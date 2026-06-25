@@ -34,6 +34,11 @@ router.get('/state', verifyToken, handle(async (req, res) => {
   res.json(await game.getState(req.userId))
 }))
 
+// Referral stats for the logged-in user (earnings + how many they referred)
+router.get('/referral', verifyToken, handle(async (req, res) => {
+  res.json(await q.getReferralStats(req.userId))
+}))
+
 router.get('/dashboard', verifyToken, handle(async (req, res) => {
   res.json(await game.getDashboard(req.userId))
 }))

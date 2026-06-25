@@ -175,7 +175,22 @@ CREATE TABLE IF NOT EXISTS processed_deposits (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Referrals: who referred each user (set once at signup), + lifetime earnings (HC)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by INT REFERENCES users(id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_earnings DECIMAL(20,4) DEFAULT 0;
+
+-- Exactly ONE referral reward per referred user, ever (first-deposit-only, idempotent).
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  referee_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  referrer_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deposit_signature VARCHAR(128) NOT NULL,
+  amount_hc DECIMAL(20,4) NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes
+CREATE INDEX IF NOT EXISTS idx_referral_referrer ON referral_rewards(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);
 CREATE INDEX IF NOT EXISTS idx_plants_user ON plants(user_id);
 CREATE INDEX IF NOT EXISTS idx_animals_user ON animals(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);

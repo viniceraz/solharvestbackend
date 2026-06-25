@@ -11,6 +11,10 @@ module.exports = {
   // Deposit: tokens / RATE → HC (−5% tax). Withdraw: HC * RATE → tokens (−10% tax).
   TOKEN_TO_HC_RATE: parseInt(process.env.TOKEN_TO_HC_RATE || '1000', 10),
 
+  // Referral: referrer earns this fraction of a referee's FIRST deposit (in HC,
+  // protocol-funded). Referrer must have deposited at least once to be eligible.
+  REFERRAL_RATE: parseFloat(process.env.REFERRAL_RATE || '0.05'),
+
   // Shop prices (in HC)
   PRICES: {
     seed: 50,

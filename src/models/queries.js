@@ -356,6 +356,42 @@ const q = {
     await pool.query('DELETE FROM banned_players WHERE user_id = $1', [userId])
   },
 
+  // ---- Referrals ----------------------------------------------------------
+  // Bind a referrer ONCE (never overwrite) and never to self.
+  async setReferrerOnce(userId, referrerId) {
+    const { rows } = await pool.query(
+      'UPDATE users SET referred_by = $2, updated_at = NOW() WHERE id = $1 AND referred_by IS NULL AND id <> $2 RETURNING id',
+      [userId, referrerId]
+    )
+    return rows.length > 0
+  },
+  // Pay a referral reward atomically, at most once per referee (PK on referee_id).
+  // Returns true if this call actually paid (false if already rewarded).
+  async payReferralReward(refereeId, referrerId, signature, amountHc) {
+    const ins = await pool.query(
+      `INSERT INTO referral_rewards (referee_id, referrer_id, deposit_signature, amount_hc)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (referee_id) DO NOTHING`,
+      [refereeId, referrerId, signature, amountHc]
+    )
+    if (!ins.rowCount) return false
+    await pool.query(
+      `UPDATE users SET offchain_balance = offchain_balance + $2,
+         referral_earnings = referral_earnings + $2, updated_at = NOW() WHERE id = $1`,
+      [referrerId, amountHc]
+    )
+    return true
+  },
+  async getReferralStats(userId) {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(referral_earnings, 0) AS earnings,
+         (SELECT COUNT(*)::int FROM users WHERE referred_by = $1) AS referrals,
+         (SELECT COUNT(*)::int FROM referral_rewards WHERE referrer_id = $1) AS rewarded
+       FROM users WHERE id = $1`,
+      [userId]
+    )
+    return rows[0] || { earnings: 0, referrals: 0, rewarded: 0 }
+  },
+
   // ---- On-chain deposits (idempotency) ------------------------------------
   async isDepositProcessed(signature) {
     const { rows } = await pool.query('SELECT 1 FROM processed_deposits WHERE signature = $1', [signature])

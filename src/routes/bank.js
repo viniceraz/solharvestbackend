@@ -3,7 +3,7 @@ const economy = require('../services/economyService')
 const q = require('../models/queries')
 const config = require('../services/configService')
 const solana = require('../utils/solana-contract')
-const { TOKEN_TO_HC_RATE } = require('../config/constants')
+const { TOKEN_TO_HC_RATE, REFERRAL_RATE } = require('../config/constants')
 const { ApiError, validAmount, round } = require('../utils/helpers')
 const { verifyToken, requireNotBanned } = require('../middleware/auth')
 const { actionLimiter } = require('../middleware/rateLimit')
@@ -51,6 +51,21 @@ router.post('/deposit-confirm', guard, async (req, res, next) => {
     await q.recordDeposit(signature, req.userId, parsed.amount.toString(), received)
     const user = await q.adjustBalances(req.userId, { offchain: received, deposited: received })
     await q.logTx(req.userId, 'deposit', tokens, round(grossHc * taxRate), `on-chain ${tokens} $HARVEST → ${received} HC (${signature.slice(0, 8)}…)`)
+
+    // Referral bonus — protocol-funded 5%, paid ONLY on the referee's FIRST deposit
+    // (me.total_deposited was 0 before this credit), and ONLY if the referrer has
+    // deposited at least once (anti-sybil). payReferralReward is once-per-referee.
+    if (me.referred_by && Number(me.total_deposited) === 0) {
+      const referrer = await q.getUserById(me.referred_by)
+      if (referrer && Number(referrer.total_deposited) > 0) {
+        const bonus = round(grossHc * REFERRAL_RATE)
+        if (bonus > 0 && (await q.payReferralReward(req.userId, referrer.id, signature, bonus))) {
+          await q.logTx(referrer.id, 'referral', bonus, 0, `referral bonus from ${me.wallet_address.slice(0, 6)}…`)
+          await q.addNotification(referrer.id, `You earned ${bonus} HC from a referral! 🎉`, 'success')
+        }
+      }
+    }
+
     res.json({ user: publicUser(user), received })
   } catch (e) {
     next(e)

@@ -10,6 +10,7 @@ function publicUser(u) {
     totalDeposited: num(u.total_deposited),
     totalWithdrawn: num(u.total_withdrawn),
     totalHarvested: num(u.total_harvested),
+    referralEarnings: num(u.referral_earnings),
     maxPlots: u.max_plots,
     maxPens: u.max_pens,
     isAdmin: !!u.is_admin,
