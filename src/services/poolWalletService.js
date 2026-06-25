@@ -62,27 +62,38 @@ async function getUserTokenBalance(walletAddress) {
   } catch { return 0 }
 }
 
-// Confirm a sent tx WITHOUT false negatives: only throw once the blockhash has
-// expired AND the tx still hasn't landed (after which it can never land). This
-// prevents refunding HC for a withdrawal whose token transfer actually succeeded.
-async function confirmRobust(signature, lastValidBlockHeight) {
-  for (;;) {
-    const { value } = await connection.getSignatureStatus(signature)
-    if (value) {
-      if (value.err) throw new Error(`withdraw tx failed on-chain: ${JSON.stringify(value.err)}`)
-      if (value.confirmationStatus === 'confirmed' || value.confirmationStatus === 'finalized') return signature
-    }
-    if ((await connection.getBlockHeight()) > lastValidBlockHeight) {
-      const final = await connection.getSignatureStatus(signature, { searchTransactionHistory: true })
-      if (final.value && !final.value.err) return signature // it actually landed
-      throw new Error('withdraw tx expired without confirming')
-    }
-    await sleep(1500)
+// Decide a withdrawal's fate WITHOUT false negatives. Returns:
+//   { ok: true }        confirmed on-chain (success)
+//   { ok: false, err }  confirmed but reverted (safe to refund)
+//   { ok: null }        UNKNOWN after retries — caller must NOT refund
+// Tolerant of a load-balanced RPC (nodes that lag): retries status, then makes a
+// final authoritative ledger check via getTransaction.
+async function confirmWithdrawal(signature, lastValidBlockHeight) {
+  const deadline = Date.now() + 50000
+  while (Date.now() < deadline) {
+    try {
+      const { value } = await connection.getSignatureStatus(signature, { searchTransactionHistory: true })
+      if (value) {
+        if (value.err) return { ok: false, err: value.err }
+        if (value.confirmationStatus === 'confirmed' || value.confirmationStatus === 'finalized') return { ok: true }
+      } else if ((await connection.getBlockHeight()) > lastValidBlockHeight + 50) {
+        const tx = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 })
+        if (tx) return tx.meta && tx.meta.err ? { ok: false, err: tx.meta.err } : { ok: true }
+        return { ok: null }
+      }
+    } catch { /* transient RPC error — retry */ }
+    await sleep(2000)
   }
+  try {
+    const tx = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 })
+    if (tx) return tx.meta && tx.meta.err ? { ok: false, err: tx.meta.err } : { ok: true }
+  } catch { /* ignore */ }
+  return { ok: null }
 }
 
 // Send $HARVEST from the pool to a user (withdrawals). amount = UI tokens.
 // Creates the user's token account if missing (idempotent) in the same tx.
+// Throws ONLY when it is safe to refund (submit failed, or the tx reverted).
 async function sendTokensToUser(userWalletAddress, amount) {
   const pool = getPoolKeypair()
   const prog = await tokenProgram()
@@ -96,8 +107,19 @@ async function sendTokensToUser(userWalletAddress, amount) {
   tx.add(createAssociatedTokenAccountIdempotentInstruction(poolWallet(), toAta, userPubkey, harvestMint(), prog))
   tx.add(createTransferInstruction(fromAta, toAta, poolWallet(), raw, [], prog))
   tx.sign(pool)
-  const signature = await connection.sendRawTransaction(tx.serialize())
-  return confirmRobust(signature, lastValidBlockHeight)
+
+  let signature
+  try {
+    signature = await connection.sendRawTransaction(tx.serialize())
+  } catch (e) {
+    // Submit/preflight failed → the transfer did NOT execute → safe to refund.
+    throw new Error('withdraw submit failed: ' + (e.message || e))
+  }
+
+  const r = await confirmWithdrawal(signature, lastValidBlockHeight)
+  if (r.ok === false) throw new Error(`withdraw reverted on-chain (sig ${signature}): ${JSON.stringify(r.err)}`)
+  if (r.ok === null) console.error(`[withdraw] UNCONFIRMED, NOT refunding (sig ${signature}) — verify manually`)
+  return signature
 }
 
 // Parse ONE confirmed tx → { signature, from, amount } if it credited $HARVEST
