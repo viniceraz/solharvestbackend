@@ -31,6 +31,7 @@ app.get('/api/health', async (req, res) => {
     status: 'ok',
     uptime: Math.floor((Date.now() - startedAt) / 1000),
     db: env.useMemoryDb ? 'memory' : 'postgres',
+    commit: (process.env.RAILWAY_GIT_COMMIT_SHA || 'local').slice(0, 7),
     players,
   })
 })
