@@ -393,6 +393,37 @@ const q = {
     return { earnings: Number(r.earnings) || 0, referrals: r.referrals || 0, rewarded: r.rewarded || 0 }
   },
 
+  // ---- Pool-wallet deposits / withdrawals ---------------------------------
+  // Atomically record a deposit by its tx signature. Returns TRUE only the first
+  // time (tx_signature is UNIQUE) — the caller credits HC only when true.
+  async recordDepositTx(signature, userId, hcAmount, taxAmount, detail) {
+    const { rowCount } = await pool.query(
+      `INSERT INTO transactions (user_id, type, amount, tax_amount, item_detail, tx_signature)
+       VALUES ($1, 'deposit', $2, $3, $4, $5) ON CONFLICT (tx_signature) DO NOTHING`,
+      [userId, hcAmount, taxAmount, detail, signature]
+    )
+    return rowCount > 0
+  },
+  async logWithdrawTx(userId, hcAmount, taxAmount, detail, signature) {
+    await pool.query(
+      `INSERT INTO transactions (user_id, type, amount, tax_amount, item_detail, tx_signature)
+       VALUES ($1, 'withdraw', $2, $3, $4, $5)`,
+      [userId, hcAmount, taxAmount, detail, signature]
+    )
+  },
+  async withdrawDailyTotalHc(userId) {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+       WHERE user_id = $1 AND type = 'withdraw' AND created_at > NOW() - INTERVAL '24 hours'`, [userId])
+    return Number(rows[0].total)
+  },
+  async withdrawCountLastHour(userId) {
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS c FROM transactions
+       WHERE user_id = $1 AND type = 'withdraw' AND created_at > NOW() - INTERVAL '1 hour'`, [userId])
+    return rows[0].c
+  },
+
   // ---- On-chain deposits (idempotency) ------------------------------------
   async isDepositProcessed(signature) {
     const { rows } = await pool.query('SELECT 1 FROM processed_deposits WHERE signature = $1', [signature])

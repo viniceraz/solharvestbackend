@@ -74,6 +74,12 @@ async function start() {
   } catch (e) {
     if (e.code !== 'MODULE_NOT_FOUND') console.error(e)
   }
+  // Watch the pool wallet for incoming $HARVEST deposits (credits HC every 30s).
+  try {
+    require('./services/depositMonitor').startDepositMonitor()
+  } catch (e) {
+    console.error('[deposit-monitor] failed to start:', e.message)
+  }
   app.listen(env.PORT, () => {
     console.log(`SolHarvest API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`)
   })

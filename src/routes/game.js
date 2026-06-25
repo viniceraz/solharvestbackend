@@ -17,8 +17,8 @@ let poolCache = { value: null, at: 0 }
 async function getPool() {
   if (Date.now() - poolCache.at < 30000) return poolCache.value
   try {
-    const solana = require('../utils/solana-contract')
-    poolCache = { value: await solana.getVaultBalance(), at: Date.now() }
+    const poolSvc = require('../services/poolWalletService')
+    poolCache = { value: await poolSvc.getPoolBalance(), at: Date.now() }
   } catch {
     poolCache = { value: poolCache.value, at: Date.now() } // keep last good value
   }

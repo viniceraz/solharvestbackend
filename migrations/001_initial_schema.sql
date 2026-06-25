@@ -188,6 +188,10 @@ CREATE TABLE IF NOT EXISTS referral_rewards (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Pool-wallet deposits/withdrawals: on-chain tx signature (UNIQUE → no double-credit).
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS tx_signature VARCHAR(100);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_signature ON transactions(tx_signature);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_referral_referrer ON referral_rewards(referrer_id);
 CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);

@@ -15,6 +15,12 @@ module.exports = {
   // protocol-funded). Referrer must have deposited at least once to be eligible.
   REFERRAL_RATE: parseFloat(process.env.REFERRAL_RATE || '0.05'),
 
+  // Pool-wallet limits / anti-abuse (env-overridable)
+  MIN_DEPOSIT_TOKENS: parseInt(process.env.MIN_DEPOSIT_TOKENS || '1000', 10),
+  MIN_WITHDRAW_HC: parseFloat(process.env.MIN_WITHDRAW_HC || '10'),
+  MAX_WITHDRAW_PER_DAY_HC: parseFloat(process.env.MAX_WITHDRAW_PER_DAY_HC || '10000'),
+  MAX_WITHDRAWS_PER_HOUR: parseInt(process.env.MAX_WITHDRAWS_PER_HOUR || '3', 10),
+
   // Shop prices (in HC)
   PRICES: {
     seed: 50,
