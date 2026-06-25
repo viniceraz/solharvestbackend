@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.production
+.env.development
+.DS_Store
+*.log
+# never commit a keypair / secret
+*keypair*.json
+.devnet-admin.json
