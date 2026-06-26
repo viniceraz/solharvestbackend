@@ -488,7 +488,9 @@ const q = {
 
   // ---- Public stats -------------------------------------------------------
   async playerCount() {
-    const { rows } = await pool.query('SELECT COUNT(*)::int AS c FROM users')
+    // A "player" = someone who has actually deposited (total_deposited > 0).
+    // Empty wallets that just connected are not counted.
+    const { rows } = await pool.query('SELECT COUNT(*)::int AS c FROM users WHERE total_deposited > 0')
     return rows[0].c
   },
 
