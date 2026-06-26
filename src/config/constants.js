@@ -30,8 +30,8 @@ module.exports = {
     scarecrow: 15,
     fertilizer: 12,
     medicine: 20,
-    plot: 100,
-    pen: 120,
+    plot: 20,
+    pen: 20,
   },
 
   // Bulk amounts (uses per purchase)
