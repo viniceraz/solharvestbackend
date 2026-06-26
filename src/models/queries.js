@@ -129,6 +129,45 @@ const q = {
     return rows.length > 0
   },
 
+  // ---- Promo pack ---------------------------------------------------------
+  async promoRemaining() {
+    const { rows } = await pool.query('SELECT remaining FROM promo_pack WHERE id = 1')
+    return rows[0] ? rows[0].remaining : 0
+  },
+  async promoPurchased(userId) {
+    const { rows } = await pool.query('SELECT 1 FROM promo_purchases WHERE user_id = $1', [userId])
+    return rows.length > 0
+  },
+  // Buy the pack ATOMICALLY: claim a per-player slot, decrement global stock,
+  // deduct HC, and grant all items — all in one transaction so nothing races,
+  // oversells, or charges without delivering. Returns {error} or {remaining,balance}.
+  async buyPromoPack(userId, price, contents) {
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      const claim = await c.query('INSERT INTO promo_purchases (user_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING user_id', [userId])
+      if (claim.rows.length === 0) { await c.query('ROLLBACK'); return { error: 'already' } }
+      const stock = await c.query('UPDATE promo_pack SET remaining = remaining - 1 WHERE id = 1 AND remaining > 0 RETURNING remaining')
+      if (stock.rows.length === 0) { await c.query('ROLLBACK'); return { error: 'soldout' } }
+      const spend = await c.query('UPDATE users SET offchain_balance = offchain_balance - $2 WHERE id = $1 AND offchain_balance >= $2 RETURNING offchain_balance', [userId, price])
+      if (spend.rows.length === 0) { await c.query('ROLLBACK'); return { error: 'funds' } }
+      for (const [item, qty] of Object.entries(contents)) {
+        await c.query(
+          `INSERT INTO inventory (user_id, item_type, quantity) VALUES ($1, $2, $3)
+           ON CONFLICT (user_id, item_type) DO UPDATE SET quantity = inventory.quantity + $3`,
+          [userId, item, qty]
+        )
+      }
+      await c.query('COMMIT')
+      return { remaining: stock.rows[0].remaining, balance: spend.rows[0].offchain_balance }
+    } catch (e) {
+      await c.query('ROLLBACK').catch(() => {})
+      throw e
+    } finally {
+      c.release()
+    }
+  },
+
   // ---- Scarecrow ----------------------------------------------------------
   async ensureScarecrow(userId) {
     await pool.query('INSERT INTO scarecrow_status (user_id, active) VALUES ($1, FALSE) ON CONFLICT (user_id) DO NOTHING', [userId])

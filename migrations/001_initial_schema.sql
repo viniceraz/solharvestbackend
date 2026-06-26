@@ -208,3 +208,16 @@ CREATE INDEX IF NOT EXISTS idx_global_events_active ON global_events(starts_at, 
 INSERT INTO world_state (season, weather)
 SELECT 'spring', 'sunny'
 WHERE NOT EXISTS (SELECT 1 FROM world_state);
+
+-- Limited promo "Full Farmer Pack": one global stock counter + a per-player guard.
+CREATE TABLE IF NOT EXISTS promo_pack (
+  id INT PRIMARY KEY,
+  remaining INT NOT NULL
+);
+INSERT INTO promo_pack (id, remaining)
+SELECT 1, 40 WHERE NOT EXISTS (SELECT 1 FROM promo_pack WHERE id = 1);
+
+CREATE TABLE IF NOT EXISTS promo_purchases (
+  user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW()
+);

@@ -37,6 +37,15 @@ module.exports = {
   // Bulk amounts (uses per purchase)
   BULK: { water: 5, feed: 5 },
 
+  // Limited promo "Full Farmer Pack": a complete starter kit at 50% off, capped
+  // at a fixed global stock, one per player. Price is computed from item prices.
+  PROMO_PACK: {
+    initialStock: 40,
+    perPlayer: 1,
+    discount: 0.5,
+    contents: { seed: 6, egg: 6, water: 6, feed: 6, fertilizer: 6, medicine: 6, scarecrow: 6 },
+  },
+
   // Crop rarities
   CROP_RARITIES: [
     { name: 'Common', dropRate: 0.4, farmRate: 0.9, lifeHours: 72, color: '#8B9DAF' },

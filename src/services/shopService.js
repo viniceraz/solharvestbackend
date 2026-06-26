@@ -1,6 +1,6 @@
 const q = require('../models/queries')
 const config = require('./configService')
-const { BULK, ITEM_TYPES, MAX_PLOTS_LIMIT, MAX_PENS_LIMIT } = require('../config/constants')
+const { BULK, ITEM_TYPES, MAX_PLOTS_LIMIT, MAX_PENS_LIMIT, PROMO_PACK } = require('../config/constants')
 const { ApiError, round } = require('../utils/helpers')
 
 // Static metadata; prices come live from configService (admin-editable).
@@ -51,4 +51,35 @@ async function buy(userId, item, qty = 1) {
   return { user: spent, item, added, quantity }
 }
 
-module.exports = { SHOP_DEFS, listItems, buy }
+// ---- Full Farmer Pack (limited promo) --------------------------------------
+// Price = 50% of the items' full value (water/feed are priced per 5-use pack).
+function promoPrice() {
+  let value = 0
+  for (const [item, qty] of Object.entries(PROMO_PACK.contents)) {
+    const unit = BULK[item] ? config.price(item) / BULK[item] : config.price(item)
+    value += unit * qty
+  }
+  return round(value * PROMO_PACK.discount)
+}
+
+async function promoStatus(userId) {
+  return {
+    remaining: await q.promoRemaining(),
+    total: PROMO_PACK.initialStock,
+    price: promoPrice(),
+    contents: PROMO_PACK.contents,
+    purchased: userId ? await q.promoPurchased(userId) : false,
+  }
+}
+
+async function buyPromoPack(userId) {
+  const price = promoPrice()
+  const r = await q.buyPromoPack(userId, price, PROMO_PACK.contents)
+  if (r.error === 'already') throw new ApiError(400, 'You already claimed the Full Farmer Pack')
+  if (r.error === 'soldout') throw new ApiError(400, 'The Full Farmer Pack is sold out')
+  if (r.error === 'funds') throw new ApiError(400, 'Insufficient HarvestCoins')
+  await q.logTx(userId, 'purchase', price, 0, 'Full Farmer Pack')
+  return { ...r, price, contents: PROMO_PACK.contents }
+}
+
+module.exports = { SHOP_DEFS, listItems, buy, promoPrice, promoStatus, buyPromoPack }

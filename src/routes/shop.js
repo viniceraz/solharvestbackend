@@ -28,4 +28,24 @@ router.post('/buy', [verifyToken, requireNotBanned, actionLimiter], async (req, 
   }
 })
 
+// Limited "Full Farmer Pack" promo — status (remaining/price) + claim.
+router.get('/promo', verifyToken, async (req, res, next) => {
+  try {
+    res.json(await shop.promoStatus(req.userId))
+  } catch (e) {
+    next(e)
+  }
+})
+
+router.post('/buy-pack', [verifyToken, requireNotBanned, actionLimiter], async (req, res, next) => {
+  try {
+    const result = await shop.buyPromoPack(req.userId)
+    const inventory = await q.getInventory(req.userId)
+    const user = await q.getUserById(req.userId)
+    res.json({ ...result, inventory, user: publicUser(user) })
+  } catch (e) {
+    next(e)
+  }
+})
+
 module.exports = router
