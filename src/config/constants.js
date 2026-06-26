@@ -21,6 +21,22 @@ module.exports = {
   MAX_WITHDRAW_PER_DAY_HC: parseFloat(process.env.MAX_WITHDRAW_PER_DAY_HC || '10000'),
   MAX_WITHDRAWS_PER_HOUR: parseInt(process.env.MAX_WITHDRAWS_PER_HOUR || '3', 10),
 
+  // Spin the Wheel — 50 HC/spin, server-rolled. EV ~32 HC, house edge ~36%.
+  WHEEL_COST: 50,
+  WHEEL_MAX_PER_HOUR: 20,
+  WHEEL_PRIZES: [
+    { amount: 1, chance: 0.30 },
+    { amount: 10, chance: 0.25 },
+    { amount: 20, chance: 0.18 },
+    { amount: 30, chance: 0.12 },
+    { amount: 50, chance: 0.08 },
+    { amount: 100, chance: 0.04 },
+    { amount: 200, chance: 0.02 },
+    { amount: 1000, chance: 0.01 },
+  ],
+  // Visual slot order on the wheel (high/low interleaved) → drives prizeIndex.
+  WHEEL_SLOTS: [1, 50, 10, 200, 20, 100, 30, 1000],
+
   // Shop prices (in HC)
   PRICES: {
     seed: 50,

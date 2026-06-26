@@ -1,7 +1,9 @@
 const router = require('express').Router()
 const game = require('../services/gameService')
+const spinService = require('../services/spinService')
 const q = require('../models/queries')
-const { verifyToken } = require('../middleware/auth')
+const { verifyToken, requireNotBanned } = require('../middleware/auth')
+const { actionLimiter } = require('../middleware/rateLimit')
 
 const handle = (fn) => async (req, res, next) => {
   try {
@@ -66,6 +68,15 @@ router.post('/notifications/read', verifyToken, handle(async (req, res) => {
 // Active announcement banners (player-facing)
 router.get('/announcements', verifyToken, handle(async (req, res) => {
   res.json({ announcements: await q.activeAnnouncements() })
+}))
+
+// Spin the Wheel — roll happens server-side; client only animates to the result.
+router.post('/spin', [verifyToken, requireNotBanned, actionLimiter], handle(async (req, res) => {
+  res.json(await spinService.spin(req.userId))
+}))
+
+router.get('/spin-history', verifyToken, handle(async (req, res) => {
+  res.json({ history: await q.spinHistory(req.userId, 5) })
 }))
 
 module.exports = router

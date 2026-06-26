@@ -221,3 +221,13 @@ CREATE TABLE IF NOT EXISTS promo_purchases (
   user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Spin the Wheel history (for player history + admin stats).
+CREATE TABLE IF NOT EXISTS spin_history (
+  id SERIAL PRIMARY KEY,
+  user_id INT REFERENCES users(id) ON DELETE CASCADE,
+  prize INT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_spin_user ON spin_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_spin_date ON spin_history(created_at);

@@ -39,6 +39,8 @@ router.post('/players/:id/ban', h(async (req, res) => {
 
 router.get('/economy', h(async (req, res) => res.json(await admin.economy())))
 
+router.get('/spins', h(async (req, res) => res.json(await q.spinStats())))
+
 // Pool wallet monitoring — balance + address (clickable to Solana Explorer).
 router.get('/pool', h(async (req, res) => {
   const poolSvc = require('../services/poolWalletService')

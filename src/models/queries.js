@@ -168,6 +168,42 @@ const q = {
     }
   },
 
+  // ---- Spin the Wheel -----------------------------------------------------
+  async spinCountLastHour(userId) {
+    const { rows } = await pool.query("SELECT COUNT(*)::int c FROM spin_history WHERE user_id=$1 AND created_at > NOW() - INTERVAL '1 hour'", [userId])
+    return rows[0].c
+  },
+  // Atomic spin: deduct cost, add prize, record history — all or nothing.
+  async doSpin(userId, cost, prize) {
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      const u = await c.query(
+        'UPDATE users SET offchain_balance = offchain_balance - $2 + $3 WHERE id=$1 AND offchain_balance >= $2 RETURNING offchain_balance',
+        [userId, cost, prize]
+      )
+      if (u.rows.length === 0) { await c.query('ROLLBACK'); return { error: 'funds' } }
+      await c.query('INSERT INTO spin_history (user_id, prize) VALUES ($1, $2)', [userId, prize])
+      await c.query('COMMIT')
+      return { balance: Number(u.rows[0].offchain_balance) }
+    } catch (e) {
+      await c.query('ROLLBACK').catch(() => {})
+      throw e
+    } finally {
+      c.release()
+    }
+  },
+  async spinHistory(userId, limit = 5) {
+    const { rows } = await pool.query('SELECT prize, created_at FROM spin_history WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2', [userId, limit])
+    return rows
+  },
+  async spinStats() {
+    const totals = await pool.query('SELECT COUNT(*)::int spins, COALESCE(SUM(prize),0)::int distributed, COUNT(*) FILTER (WHERE prize=1000)::int jackpots FROM spin_history')
+    const recent = await pool.query('SELECT s.prize, s.created_at, u.wallet_address FROM spin_history s JOIN users u ON u.id=s.user_id ORDER BY s.created_at DESC LIMIT 20')
+    const daily = await pool.query("SELECT to_char(created_at::date,'MM-DD') day, COUNT(*)::int spins, COALESCE(SUM(prize),0)::int distributed FROM spin_history WHERE created_at > NOW() - INTERVAL '14 days' GROUP BY created_at::date ORDER BY created_at::date")
+    return { ...totals.rows[0], recent: recent.rows, daily: daily.rows }
+  },
+
   // ---- Scarecrow ----------------------------------------------------------
   async ensureScarecrow(userId) {
     await pool.query('INSERT INTO scarecrow_status (user_id, active) VALUES ($1, FALSE) ON CONFLICT (user_id) DO NOTHING', [userId])
