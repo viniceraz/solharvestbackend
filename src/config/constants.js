@@ -27,9 +27,9 @@ module.exports = {
     egg: 80,
     water: 2, // gives 5 uses
     feed: 3, // gives 5 uses
-    scarecrow: 15,
+    scarecrow: 10,
     fertilizer: 12,
-    medicine: 20,
+    medicine: 10,
     plot: 20,
     pen: 20,
   },
