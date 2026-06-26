@@ -6,14 +6,21 @@ const { ApiError, num, round, validIndex } = require('../utils/helpers')
 async function hatch(userId, penIndex) {
   const user = await q.getUserById(userId)
   if (!validIndex(penIndex, user.max_pens)) throw new ApiError(400, 'Invalid pen index')
-  if (await q.getAnimal(userId, penIndex)) throw new ApiError(400, 'Pen already occupied')
-  if ((await q.getItem(userId, 'egg')) <= 0) throw new ApiError(400, 'No Animal Eggs in inventory')
-  await q.addItem(userId, 'egg', -1)
+  // Consume the egg atomically FIRST, then create the animal. UNIQUE(user_id,
+  // pen_index) makes createAnimal fail if the pen is taken (incl. on a rapid-click
+  // race) — in which case we refund the egg, so it's never lost.
+  if (!(await q.consumeItem(userId, 'egg', 1))) throw new ApiError(400, 'No Animal Eggs in inventory')
   const rolled = rarity.rollAnimal()
-  const a = await q.createAnimal({
-    userId, penIndex, animalType: rolled.animalType, rarity: rolled.rarity,
-    baseFarmRate: rolled.baseFarmRate, lifeHours: rolled.lifeHours,
-  })
+  let a
+  try {
+    a = await q.createAnimal({
+      userId, penIndex, animalType: rolled.animalType, rarity: rolled.rarity,
+      baseFarmRate: rolled.baseFarmRate, lifeHours: rolled.lifeHours,
+    })
+  } catch (e) {
+    await q.addItem(userId, 'egg', 1) // pen already occupied (or a race) — refund
+    throw new ApiError(400, 'Pen already occupied')
+  }
   await q.addNotification(userId, `Hatched a ${rolled.rarity} ${rolled.animalType}`, 'success')
   return a
 }

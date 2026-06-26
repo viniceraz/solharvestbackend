@@ -118,6 +118,16 @@ const q = {
     )
     return rows[0].quantity
   },
+  // Atomically consume `n` of an item; returns true only if there was enough.
+  // Prevents check-then-act races (e.g. rapid plant clicks double-spending a seed).
+  async consumeItem(userId, item, n = 1) {
+    const { rows } = await pool.query(
+      `UPDATE inventory SET quantity = quantity - $3
+       WHERE user_id = $1 AND item_type = $2 AND quantity >= $3 RETURNING quantity`,
+      [userId, item, n]
+    )
+    return rows.length > 0
+  },
 
   // ---- Scarecrow ----------------------------------------------------------
   async ensureScarecrow(userId) {

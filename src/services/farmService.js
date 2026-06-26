@@ -9,14 +9,21 @@ const hoursFromNow = (h) => new Date(Date.now() + h * 3600 * 1000)
 async function plant(userId, plotIndex) {
   const user = await q.getUserById(userId)
   if (!validIndex(plotIndex, user.max_plots)) throw new ApiError(400, 'Invalid plot index')
-  if (await q.getPlant(userId, plotIndex)) throw new ApiError(400, 'Plot already occupied')
-  if ((await q.getItem(userId, 'seed')) <= 0) throw new ApiError(400, 'No Seed Packs in inventory')
-  await q.addItem(userId, 'seed', -1)
+  // Consume the seed atomically FIRST, then create the plant. The UNIQUE(user_id,
+  // plot_index) constraint makes createPlant fail if the plot is taken (incl. on a
+  // rapid-click race) — in which case we refund the seed, so it's never lost.
+  if (!(await q.consumeItem(userId, 'seed', 1))) throw new ApiError(400, 'No Seed Packs in inventory')
   const rolled = rarity.rollCrop()
-  const p = await q.createPlant({
-    userId, plotIndex, cropType: rolled.cropType, rarity: rolled.rarity,
-    baseFarmRate: rolled.baseFarmRate, lifeHours: rolled.lifeHours,
-  })
+  let p
+  try {
+    p = await q.createPlant({
+      userId, plotIndex, cropType: rolled.cropType, rarity: rolled.rarity,
+      baseFarmRate: rolled.baseFarmRate, lifeHours: rolled.lifeHours,
+    })
+  } catch (e) {
+    await q.addItem(userId, 'seed', 1) // plot already occupied (or a race) — refund
+    throw new ApiError(400, 'Plot already occupied')
+  }
   await q.addNotification(userId, `Planted a ${rolled.rarity} ${rolled.cropType}`, 'success')
   return p
 }
